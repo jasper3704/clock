@@ -108,8 +108,16 @@
       display: block;
     }
 
+    /* 避免 display: none 導致 iOS Safari 停止更新 canvas 串流影格 */
     #clockCanvas {
-      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 2px;
+      height: 2px;
+      opacity: 0.01;
+      pointer-events: none;
+      z-index: -1;
     }
 
     .btn-primary {
@@ -195,6 +203,8 @@
   </style>
 </head>
 <body>
+  <canvas id="clockCanvas" width="600" height="260"></canvas>
+
   <div class="container">
     <header>
       <h1>純淨懸浮時鐘</h1>
@@ -207,7 +217,6 @@
     <!-- 預覽與啟動區 -->
     <div class="card">
       <div class="preview-wrapper">
-        <canvas id="clockCanvas" width="600" height="260"></canvas>
         <video id="pipVideo" playsinline muted autoplay></video>
       </div>
 
@@ -242,7 +251,7 @@
 
   <script>
     const canvas = document.getElementById('clockCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d');
     const pipVideo = document.getElementById('pipVideo');
     const toggleBtn = document.getElementById('toggleBtn');
     const alertBox = document.getElementById('alertBox');
@@ -270,4 +279,145 @@
       const isInApp = /Line|FBAN|FBAV|Instagram|Threads|MicroMessenger|Twitter/i.test(ua);
 
       if (isStandalone) {
-        envBanner.inner
+        envBanner.innerHTML = '<strong>⚠️ 目前為「主畫面獨立視窗」模式</strong>iOS 系統會封鎖此模式的畫中畫功能。請直接打開 Safari 分頁前往此網址，或改用「捷徑 App」建立桌面啟動圖示。';
+        envBanner.style.display = 'block';
+      } else if (isInApp) {
+        envBanner.innerHTML = '<strong>⚠️ 目前為 App 內建瀏覽器</strong>請點擊畫面右下角（或右上角）的選單圖示，選擇「在 Safari 中開啟」才能啟動懸浮時鐘。';
+        envBanner.style.display = 'block';
+      }
+    }
+    detectEnvironment();
+
+    function pad(num) {
+      return num < 10 ? '0' + num : '' + num;
+    }
+
+    function drawClock() {
+      const now = new Date();
+      const theme = THEMES[state.theme];
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      // 顯示日期與星期
+      const yyyy = now.getFullYear();
+      const mon = pad(now.getMonth() + 1);
+      const day = pad(now.getDate());
+      const wk = WEEKDAYS[now.getDay()];
+      const dateStr = `${yyyy}/${mon}/${day} ${wk}`;
+
+      ctx.fillStyle = theme.sub;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `500 28px -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif`;
+      ctx.fillText(dateStr, w / 2, h * 0.25);
+
+      // 顯示時:分:秒.0.1秒
+      const hh = pad(now.getHours());
+      const mm = pad(now.getMinutes());
+      const ss = pad(now.getSeconds());
+      const deci = Math.floor(now.getMilliseconds() / 100);
+      const timeStr = `${hh}:${mm}:${ss}.${deci}`;
+
+      ctx.fillStyle = theme.fg;
+      ctx.font = `700 90px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
+      ctx.fillText(timeStr, w / 2, h * 0.63);
+    }
+
+    // 初始化串流並確保播放器載入後立即重繪第一幀
+    drawClock();
+    const stream = canvas.captureStream();
+    pipVideo.srcObject = stream;
+
+    function startPlayback() {
+      drawClock();
+      if (pipVideo.paused) {
+        pipVideo.play().catch(() => {});
+      }
+    }
+
+    pipVideo.addEventListener('loadedmetadata', startPlayback);
+    pipVideo.addEventListener('playing', drawClock);
+    startPlayback();
+
+    // 前景使用 requestAnimationFrame 確保畫面即時推流
+    function rafLoop() {
+      if (!document.hidden) {
+        drawClock();
+      }
+      requestAnimationFrame(rafLoop);
+    }
+    requestAnimationFrame(rafLoop);
+
+    // 背景畫中畫使用 Web Worker 維持每秒更新
+    try {
+      const workerBlob = new Blob([`
+        setInterval(() => postMessage(1), 100);
+      `], { type: 'application/javascript' });
+      const worker = new Worker(URL.createObjectURL(workerBlob));
+      worker.onmessage = drawClock;
+    } catch (e) {
+      setInterval(drawClock, 100);
+    }
+
+    function showAlert(msg) {
+      alertBox.textContent = msg;
+      alertBox.style.display = 'block';
+    }
+
+    function hideAlert() {
+      alertBox.style.display = 'none';
+    }
+
+    function updatePiPState(active) {
+      state.isPiP = active;
+      toggleBtn.textContent = active ? '關閉懸浮時鐘' : '啟動懸浮時鐘';
+      toggleBtn.classList.toggle('active', active);
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      hideAlert();
+      startPlayback();
+
+      if (typeof pipVideo.webkitSupportsPresentationMode === 'function') {
+        if (pipVideo.webkitSupportsPresentationMode('picture-in-picture')) {
+          const nextMode = pipVideo.webkitPresentationMode === 'picture-in-picture'
+            ? 'inline'
+            : 'picture-in-picture';
+          pipVideo.webkitSetPresentationMode(nextMode);
+        } else {
+          showAlert('目前視窗被 iOS 系統限制無法啟動畫中畫：請確認你是直接在「Safari 瀏覽器分頁」中開啟此網址，且手機「設定 → 一般 → 子母畫面」已開啟。');
+        }
+      } else if (document.pictureInPictureEnabled) {
+        if (document.pictureInPictureElement) {
+          document.exitPictureInPicture().catch(() => {});
+        } else {
+          pipVideo.requestPictureInPicture().catch(() => {
+            showAlert('瀏覽器無法啟動畫中畫，請改用 iPhone Safari 開啟此網址。');
+          });
+        }
+      } else {
+        showAlert('目前開啟的瀏覽器不支援畫中畫功能，請改用 iPhone Safari 開啟。');
+      }
+    });
+
+    pipVideo.addEventListener('webkitpresentationmodechanged', () => {
+      updatePiPState(pipVideo.webkitPresentationMode === 'picture-in-picture');
+    });
+
+    pipVideo.addEventListener('enterpictureinpicture', () => updatePiPState(true));
+    pipVideo.addEventListener('leavepictureinpicture', () => updatePiPState(false));
+
+    themeBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        themeBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        state.theme = btn.dataset.theme;
+        drawClock();
+      });
+    });
+  </script>
+</body>
+</html>
