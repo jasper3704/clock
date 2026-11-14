@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>純淨懸浮時鐘</title>
+  <style>
+    :root {
+      --bg: #0f1014;
+      --card: #1a1c23;
+      --text: #f4f4f6;
+      --subtext: #9498a6;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 24px);
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", sans-serif;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 12px;
+    }
+
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 4px 0;
+      letter-spacing: -0.3px;
+    }
+
+    header p {
+      font-size: 13px;
+      color: var(--subtext);
+      margin: 0;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .preview-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 1;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #141418;
+      border: 1px solid var(--border);
+    }
+
+    /* 必須保持 video 在畫面中可見，iOS Safari 才允許啟動畫中畫 */
+    #pipVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    #clockCanvas {
+      display: none;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary.active {
+      background: var(--danger);
+    }
+
+    .alert-box {
+      display: none;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 15px;
+    }
+
+    .setting-row + .setting-row {
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    /* iOS 風格開關 */
+    .switch {
+      position: relative;
+      width: 50px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      background-color: #323644;
+      border-radius: 30px;
+      transition: 0.25s;
+      cursor: pointer;
+    }
+
+    .slider:before {
+      content: "";
+      position: absolute;
+      height: 24px;
+      width: 24px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.25s;
+    }
+
+    input:checked + .slider {
+      background-color: #22c55e;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .theme-btn {
+      padding: 11px 12px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: #13141a;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-btn.selected {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.14);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .tips {
+      font-size: 12.5px;
+      color: var(--subtext);
+      line-height: 1.6;
+      padding: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>純淨懸浮時鐘</h1>
+      <p>無廣告、免安裝、支援跨 App 畫中畫懸浮</p>
+    </header>
+
+    <!-- 預覽與啟動區 -->
+    <div class="card">
+      <div class="preview-wrapper">
+        <canvas id="clockCanvas" width="600" height="200"></canvas>
+        <video id="pipVideo" playsinline muted autoplay></video>
+      </div>
+
+      <button id="toggleBtn" class="btn-primary">啟動懸浮時鐘</button>
+      <div id="alertBox" class="alert-box"></div>
+    </div>
+
+    <!-- 顯示設定 -->
+    <div class="card">
+      <div class="setting-row">
+        <span>顯示 0.1 秒（十分之一秒）</span>
+        <label class="switch">
+          <input type="checkbox" id="showDeciToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <span>顯示日期與星期</span>
+        <label class="switch">
+          <input type="checkbox" id="showDateToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 配色主題 -->
+    <div class="card">
+      <div style="font-size: 14px; color: var(--subtext); margin-bottom: -4px;">外觀配色</div>
+      <div class="theme-grid" id="themeGrid">
+        <button class="theme-btn selected" data-theme="pure">
+          <span class="dot" style="background:#ffffff;"></span>黑底純白
+        </button>
+        <button class="theme-btn" data-theme="matrix">
+          <span class="dot" style="background:#2ee872;"></span>黑底螢光綠
+        </button>
+        <button class="theme-btn" data-theme="amber">
+          <span class="dot" style="background:#ffa61a;"></span>黑底琥珀橘
+        </button>
+        <button class="theme-btn" data-theme="light">
+          <span class="dot" style="background:#18181b; border:1px solid #666;"></span>白底深黑
+        </button>
+      </div>
+    </div>
+
+    <div class="tips">
+      • 啟動後直接上滑返回主畫面或切換至其他 App，時鐘即會保持懸浮。<br>
+      • 懸浮視窗可用雙指縮放大小，或拖曳至螢幕四個角落、向側邊隱藏。
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('clockCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const pipVideo = document.getElementById('pipVideo');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const alertBox = document.getElementById('alertBox');
+    const showDeciToggle = document.getElementById('showDeciToggle');
+    const showDateToggle = document.getElementById('showDateToggle');
+    const themeBtns = document.querySelectorAll('.theme-btn');
+
+    const THEMES = {
+      pure:   { bg: '#141418', fg: '#ffffff', sub: 'rgba(255,255,255,0.72)' },
+      matrix: { bg: '#141418', fg: '#2ee872', sub: 'rgba(46,232,114,0.75)' },
+      amber:  { bg: '#141418', fg: '#ffa61a', sub: 'rgba(255,166,26,0.75)' },
+      light:  { bg: '#f4f4f7', fg: '#16161a', sub: 'rgba(22,22,26,0.68)' }
+    };
+
+    const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+    let state = {
+      showDeci: false,
+      showDate: false,
+      theme: 'pure',
+      isPiP: false
+    };
+
+    function pad(num) {
+      return num < 10 ? '0' + num : '' + num;
+    }
+
+    function drawClock() {
+      const now = new Date();
+      const theme = THEMES[state.theme];
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // 1. 填滿背景
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      // 2. 組合時間字串
+      const hh = pad(now.getHours());
+      const mm = pad(now.getMinutes());
+      const ss = pad(now.getSeconds());
+      let timeStr = `${hh}:${mm}:${ss}`;
+      if (state.showDeci) {
+        const deci = Math.floor(now.getMilliseconds() / 100);
+        timeStr += `.${deci}`;
+      }
+
+      // 3. 繪製時間（使用等寬字體避免秒數跳動時左右晃動）
+      ctx.fillStyle = theme.fg;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const fontSize = state.showDeci ? 88 : 104;
+      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
+
+      const timeY = state.showDate ? h * 0.58 : h * 0.52;
+      ctx.fillText(timeStr, w / 2, timeY);
+
+      // 4. 若開啟日期，於上方繪製
+      if (state.showDate) {
+        const yyyy = now.getFullYear();
+        const mon = pad(now.getMonth() + 1);
+        const day = pad(now.getDate());
+        const wk = WEEKDAYS[now.getDay()];
+        const dateStr = `${yyyy}/${mon}/${day} ${wk}`;
+
+        ctx.fillStyle = theme.sub;
+        ctx.font = `500 26px -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif`;
+        ctx.fillText(dateStr, w / 2, h * 0.22);
+      }
+    }
+
+    // 先繪製第一幀再擷取串流，確保畫面不黑屏
+    drawClock();
+    const stream = canvas.captureStream(30);
+    pipVideo.srcObject = stream;
+    pipVideo.play().catch(() => {});
+
+    // 使用 Web Worker 計時器，避免切換至背景 App 時被 iOS Safari 完全凍結
+    try {
+      const workerBlob = new Blob([`
+        setInterval(() => postMessage(1), 50);
+      `], { type: 'application/javascript' });
+      const worker = new Worker(URL.createObjectURL(workerBlob));
+      worker.onmessage = drawClock;
+    } catch (e) {
+      setInterval(drawClock, 50);
+    }
+
+    function showAlert(msg) {
+      alertBox.textContent = msg;
+      alertBox.style.display = 'block';
+    }
+
+    function hideAlert() {
+      alertBox.style.display = 'none';
+    }
+
+    function updatePiPState(active) {
+      state.isPiP = active;
+      toggleBtn.textContent = active ? '關閉懸浮時鐘' : '啟動懸浮時鐘';
+      toggleBtn.classList.toggle('active', active);
+    }
+
+    // 綁定按鈕點擊事件（必須在手勢事件中直接觸發，iOS Safari 才放行）
+    toggleBtn.addEventListener('click', async () => {
+      hideAlert();
+      try {
+        if (pipVideo.paused) {
+          await pipVideo.play();
+        }
+
+        if (typeof pipVideo.webkitSetPresentationMode === 'function') {
+          const nextMode = pipVideo.webkitPresentationMode === 'picture-in-picture'
+            ? 'inline'
+            : 'picture-in-picture';
+          pipVideo.webkitSetPresentationMode(nextMode);
+        } else if (document.pictureInPictureEnabled) {
+          if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+          } else {
+            await pipVideo.requestPictureInPicture();
+          }
+        } else {
+          showAlert('目前開啟的環境不支援畫中畫。請確認你是用 iPhone「Safari」開啟，而非 LINE 內建瀏覽器或檔案預覽。');
+        }
+      } catch (err) {
+        showAlert('無法啟動畫中畫：請確認已在 iPhone「設定 → 一般 → 子母畫面」開啟功能，並使用 Safari 開啟此檔案。');
+      }
+    });
+
+    // 監聽視窗狀態變化（包含使用者直接按懸浮窗的 X 關閉）
+    pipVideo.addEventListener('webkitpresentationmodechanged', () => {
+      updatePiPState(pipVideo.webkitPresentationMode === 'picture-in-picture');
+    });
+
+    pipVideo.addEventListener('enterpictureinpicture', () => updatePiPState(true));
+    pipVideo.addEventListener('leavepictureinpicture', () => updatePiPState(false));
+
+    // 設定控制項綁定
+    showDeciToggle.addEventListener('change', (e) => {
+      state.showDeci = e.target.checked;
+      drawClock();
+    });
+
+    showDateToggle.addEventListener('change', (e) => {
+      state.showDate = e.target.checked;
+      drawClock();
+    });
+
+    themeBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        themeBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        state.theme = btn.dataset.theme;
+        drawClock();
+      });
+    });
+  </script>
+</body>
+</html>
