@@ -35,7 +35,6 @@
       min-height: 100vh;
     }
 
-    /* 收斂容器寬度，避免在手機上撐滿整個螢幕 */
     .container {
       width: 88%;
       max-width: 350px;
@@ -95,7 +94,7 @@
     .preview-wrapper {
       position: relative;
       width: 100%;
-      aspect-ratio: 600 / 220;
+      aspect-ratio: 600 / 260;
       border-radius: 13px;
       overflow: hidden;
       background: #141418;
@@ -143,61 +142,6 @@
       color: #fca5a5;
       font-size: 12.5px;
       line-height: 1.5;
-    }
-
-    .setting-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 2px 2px;
-      font-size: 14px;
-    }
-
-    .setting-row + .setting-row {
-      border-top: 1px solid var(--border);
-      padding-top: 12px;
-    }
-
-    .switch {
-      position: relative;
-      width: 46px;
-      height: 28px;
-      flex-shrink: 0;
-    }
-
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .slider {
-      position: absolute;
-      inset: 0;
-      background-color: #2e3240;
-      border-radius: 28px;
-      transition: 0.25s;
-      cursor: pointer;
-    }
-
-    .slider:before {
-      content: "";
-      position: absolute;
-      height: 22px;
-      width: 22px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      border-radius: 50%;
-      transition: 0.25s;
-    }
-
-    input:checked + .slider {
-      background-color: #22c55e;
-    }
-
-    input:checked + .slider:before {
-      transform: translateX(18px);
     }
 
     .section-label {
@@ -263,30 +207,12 @@
     <!-- 預覽與啟動區 -->
     <div class="card">
       <div class="preview-wrapper">
-        <canvas id="clockCanvas" width="600" height="220"></canvas>
+        <canvas id="clockCanvas" width="600" height="260"></canvas>
         <video id="pipVideo" playsinline muted autoplay></video>
       </div>
 
       <button id="toggleBtn" class="btn-primary">啟動懸浮時鐘</button>
       <div id="alertBox" class="alert-box"></div>
-    </div>
-
-    <!-- 顯示設定（預設皆為開啟） -->
-    <div class="card">
-      <div class="setting-row">
-        <span>顯示小數點（0.1 秒）</span>
-        <label class="switch">
-          <input type="checkbox" id="showDeciToggle" checked />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="setting-row">
-        <span>顯示日期與星期</span>
-        <label class="switch">
-          <input type="checkbox" id="showDateToggle" checked />
-          <span class="slider"></span>
-        </label>
-      </div>
     </div>
 
     <!-- 配色主題 -->
@@ -321,8 +247,6 @@
     const toggleBtn = document.getElementById('toggleBtn');
     const alertBox = document.getElementById('alertBox');
     const envBanner = document.getElementById('envBanner');
-    const showDeciToggle = document.getElementById('showDeciToggle');
-    const showDateToggle = document.getElementById('showDateToggle');
     const themeBtns = document.querySelectorAll('.theme-btn');
 
     const THEMES = {
@@ -334,10 +258,7 @@
 
     const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
-    // 預設開啟小數點與日期
     let state = {
-      showDeci: true,
-      showDate: true,
       theme: 'pure',
       isPiP: false
     };
@@ -349,144 +270,4 @@
       const isInApp = /Line|FBAN|FBAV|Instagram|Threads|MicroMessenger|Twitter/i.test(ua);
 
       if (isStandalone) {
-        envBanner.innerHTML = '<strong>⚠️ 目前為「主畫面獨立視窗」模式</strong>iOS 系統會封鎖此模式的畫中畫功能。請直接打開 Safari 分頁前往此網址，或改用「捷徑 App」建立桌面啟動圖示。';
-        envBanner.style.display = 'block';
-      } else if (isInApp) {
-        envBanner.innerHTML = '<strong>⚠️ 目前為 App 內建瀏覽器</strong>請點擊畫面右下角（或右上角）的選單圖示，選擇「在 Safari 中開啟」才能啟動懸浮時鐘。';
-        envBanner.style.display = 'block';
-      }
-    }
-    detectEnvironment();
-
-    function pad(num) {
-      return num < 10 ? '0' + num : '' + num;
-    }
-
-    function drawClock() {
-      const now = new Date();
-      const theme = THEMES[state.theme];
-      const w = canvas.width;
-      const h = canvas.height;
-
-      ctx.fillStyle = theme.bg;
-      ctx.fillRect(0, 0, w, h);
-
-      const hh = pad(now.getHours());
-      const mm = pad(now.getMinutes());
-      const ss = pad(now.getSeconds());
-      let timeStr = `${hh}:${mm}:${ss}`;
-      if (state.showDeci) {
-        const deci = Math.floor(now.getMilliseconds() / 100);
-        timeStr += `.${deci}`;
-      }
-
-      // 依是否顯示日期與小數點動態平衡字級與上下位置
-      ctx.fillStyle = theme.fg;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const fontSize = state.showDeci ? 82 : 98;
-      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
-
-      const timeY = state.showDate ? h * 0.63 : h * 0.52;
-      ctx.fillText(timeStr, w / 2, timeY);
-
-      if (state.showDate) {
-        const yyyy = now.getFullYear();
-        const mon = pad(now.getMonth() + 1);
-        const day = pad(now.getDate());
-        const wk = WEEKDAYS[now.getDay()];
-        const dateStr = `${yyyy}/${mon}/${day} ${wk}`;
-
-        ctx.fillStyle = theme.sub;
-        ctx.font = `500 25px -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif`;
-        ctx.fillText(dateStr, w / 2, h * 0.25);
-      }
-    }
-
-    drawClock();
-    const stream = canvas.captureStream(30);
-    pipVideo.srcObject = stream;
-    pipVideo.play().catch(() => {});
-
-    try {
-      const workerBlob = new Blob([`
-        setInterval(() => postMessage(1), 50);
-      `], { type: 'application/javascript' });
-      const worker = new Worker(URL.createObjectURL(workerBlob));
-      worker.onmessage = drawClock;
-    } catch (e) {
-      setInterval(drawClock, 50);
-    }
-
-    function showAlert(msg) {
-      alertBox.textContent = msg;
-      alertBox.style.display = 'block';
-    }
-
-    function hideAlert() {
-      alertBox.style.display = 'none';
-    }
-
-    function updatePiPState(active) {
-      state.isPiP = active;
-      toggleBtn.textContent = active ? '關閉懸浮時鐘' : '啟動懸浮時鐘';
-      toggleBtn.classList.toggle('active', active);
-    }
-
-    toggleBtn.addEventListener('click', () => {
-      hideAlert();
-
-      if (pipVideo.paused) {
-        pipVideo.play().catch(() => {});
-      }
-
-      if (typeof pipVideo.webkitSupportsPresentationMode === 'function') {
-        if (pipVideo.webkitSupportsPresentationMode('picture-in-picture')) {
-          const nextMode = pipVideo.webkitPresentationMode === 'picture-in-picture'
-            ? 'inline'
-            : 'picture-in-picture';
-          pipVideo.webkitSetPresentationMode(nextMode);
-        } else {
-          showAlert('目前視窗被 iOS 系統限制無法啟動畫中畫：請確認你是直接在「Safari 瀏覽器分頁」中開啟此網址，且手機「設定 → 一般 → 子母畫面」已開啟。');
-        }
-      } else if (document.pictureInPictureEnabled) {
-        if (document.pictureInPictureElement) {
-          document.exitPictureInPicture().catch(() => {});
-        } else {
-          pipVideo.requestPictureInPicture().catch(() => {
-            showAlert('瀏覽器無法啟動畫中畫，請改用 iPhone Safari 開啟此網址。');
-          });
-        }
-      } else {
-        showAlert('目前開啟的瀏覽器不支援畫中畫功能，請改用 iPhone Safari 開啟。');
-      }
-    });
-
-    pipVideo.addEventListener('webkitpresentationmodechanged', () => {
-      updatePiPState(pipVideo.webkitPresentationMode === 'picture-in-picture');
-    });
-
-    pipVideo.addEventListener('enterpictureinpicture', () => updatePiPState(true));
-    pipVideo.addEventListener('leavepictureinpicture', () => updatePiPState(false));
-
-    showDeciToggle.addEventListener('change', (e) => {
-      state.showDeci = e.target.checked;
-      drawClock();
-    });
-
-    showDateToggle.addEventListener('change', (e) => {
-      state.showDate = e.target.checked;
-      drawClock();
-    });
-
-    themeBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        themeBtns.forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        state.theme = btn.dataset.theme;
-        drawClock();
-      });
-    });
-  </script>
-</body>
-</html>
+        envBanner.inner
